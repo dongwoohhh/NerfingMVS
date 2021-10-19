@@ -27,7 +27,7 @@ def read_array(path):
 def load_point_vis(path, masks):
     with open(path, 'rb') as f:
         n = struct.unpack('<Q', f.read(8))[0]
-        print('point number: {}'.format(n))
+        #print('point number: {}'.format(n))
         for i in range(n):
             m = struct.unpack('<I', f.read(4))[0]
             for j in range(m):

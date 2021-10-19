@@ -66,6 +66,7 @@ def train(args):
     images = load_rgbs(image_list, os.path.join(args.datadir, 'images'), 
                        args.depth_H, args.depth_W)
     images_train = images.clone()
+
     depths, masks = load_colmap(image_list, args.datadir, 
                                 args.depth_H, args.depth_W)
 
