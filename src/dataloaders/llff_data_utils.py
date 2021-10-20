@@ -15,7 +15,7 @@
 import numpy as np
 import os
 import imageio
-from colmap_read_model import read_images_binary
+from .colmap_read_model import read_images_binary
 
 
 ########## Slightly modified version of LLFF data loading code

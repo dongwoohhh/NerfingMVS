@@ -2,8 +2,8 @@ import os, sys
 
 sys.path.append('../..')
 
-from data_utils import rectify_inplane_rotation, random_crop, random_flip, get_nearest_pose_ids
-from llff_data_utils import load_llff_data, batch_parse_llff_poses
+from .data_utils import rectify_inplane_rotation, random_crop, random_flip, get_nearest_pose_ids
+from .llff_data_utils import load_llff_data, batch_parse_llff_poses
 
 import numpy as np
 import torch

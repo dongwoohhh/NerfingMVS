@@ -97,4 +97,12 @@ def config_parser():
     parser.add_argument("--worker_num", type=int, default=8,
                         help='the number of worker for multiprocessing')
     
+    # maml options
+    parser.add_argument("--list_prefix", type=str, default=None,
+                         help='Train/val split of the dataset')
+    parser.add_argument("--num_source_views", type=int, default=10,
+                         help='The number of source view images')
+    parser.add_argument("--workers", type=int, default=8,
+                        help='n cpu workers for dataloader')
+
     return parser
