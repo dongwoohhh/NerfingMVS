@@ -63,11 +63,15 @@ class DTUMVSNeRFDataset(Dataset):
                 i_train = np.array(np.arange(int(poses.shape[0])))
                 i_render = i_train
             else:
+                i_train = np.array(np.arange(int(poses.shape[0])))
+                i_render = i_train
+                """
                 raise NotImplementedError
                 i_test = np.arange(poses.shape[0])[::args.llffhold]
                 i_train = np.array([j for j in np.arange(int(poses.shape[0])) if
                                     (j not in i_test and j not in i_test)])
                 i_render = i_test
+                """
 
             self.train_intrinsics.append(intrinsics[i_train])
             self.train_poses.append(c2w_mats[i_train])
@@ -82,9 +86,9 @@ class DTUMVSNeRFDataset(Dataset):
             
             for i_image in range(num_render):
                 self.scene_dir.append(scene[1])
-        
+
     def __len__(self):
-        return len(self.all_scenes)
+        return len(self.scene_dir)
     
     def __getitem__(self, idx):
         render_pose = self.render_poses[idx]
@@ -120,7 +124,7 @@ class DTUMVSNeRFDataset(Dataset):
 
         #print(query_images.shape, query_depths.shape, query_masks.shape)
         #print(support_images.shape, support_depths.shape, support_masks.shape)
-
+        
         #print(images.shape, depths.shape, masks.shape)
 
         return {
@@ -130,6 +134,7 @@ class DTUMVSNeRFDataset(Dataset):
             "query_images": query_images,
             "query_depths": query_depths,
             "query_masks": query_masks,
+            #"scene_id":
         }
         """
         return {
@@ -150,7 +155,7 @@ class DTUMVSNeRFDataset(Dataset):
         
         depths = torch.from_numpy(depths)
         masks = torch.from_numpy(masks)
-
+        #print(datadir, masks.sum())
         return images, depths, masks
 
 

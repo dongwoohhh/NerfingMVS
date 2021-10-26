@@ -100,17 +100,22 @@ def config_parser():
     # maml options
     parser.add_argument("--list_prefix", type=str, default=None,
                          help='Train/val split of the dataset')
-    parser.add_argument("--num_source_views", type=int, default=10,
+    parser.add_argument("--num_source_views", type=int, default=2,
                          help='The number of source view images')
     parser.add_argument("--workers", type=int, default=8,
                         help='n cpu workers for dataloader')
-    parser.add_argument("--update_step", type=int, default=5,
+    parser.add_argument("--update_step", type=int, default=2,
                         help='steps for inner loop.')
     #meta_lr/update_lr
     parser.add_argument("--meta_lr", type=float, default=1e-5,
                         help='learning rate for meta update.')
     parser.add_argument("--update_lr", type=float, default=1e-2,
                         help='learning rate for inner loop update.')
+    
+    parser.add_argument("--n_tasks", type=int, default=1)
+
+    parser.add_argument("--vis_step", type=int, default=100)
+
 
 
     return parser
