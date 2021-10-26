@@ -98,34 +98,60 @@ class DTUMVSNeRFDataset(Dataset):
 
         id_render = -1
         #id_render = train_rgb_files.index(rgb_file)
-        subsample_factor = 1
-        num_select = self.num_source_views
+        subsample_factor = 2
+        num_select = self.num_source_views * subsample_factor
 
         nearest_pose_ids = get_nearest_pose_ids(render_pose,
                                                 train_poses,
-                                                min(self.num_source_views*subsample_factor, 22),
+                                                #min(self.num_source_views*subsample_factor, 22),
+                                                num_select,
                                                 tar_id=id_render,
                                                 angular_dist_method='dist',
                                                 scene_center=world_center)
-        nearest_pose_ids = np.random.choice(nearest_pose_ids, min(num_select, len(nearest_pose_ids)), replace=False)
-
-
-        image_list = [train_rgb_files[i].split('/')[-1] for i in nearest_pose_ids]
-        datadir = self.scene_dir[idx]
         
-        images = load_rgbs(image_list, os.path.join(datadir, 'images'),
-                           self.depth_H, self.depth_W, is_png=True)
-        
-        depths, masks = load_colmap(image_list, datadir,
-                                    self.depth_H, self.depth_W,)
-        depths = torch.from_numpy(depths)
-        masks = torch.from_numpy(masks)
+        #nearest_pose_ids = np.random.choice(nearest_pose_ids, min(num_select, len(nearest_pose_ids)), replace=False)
+
+        nearest_pose_ids = np.random.choice(nearest_pose_ids, num_select, replace=False)
+        support_pose_ids = nearest_pose_ids[:self.num_source_views]
+        query_pose_ids = nearest_pose_ids[self.num_source_views:]
+
+        support_images, support_depths, support_masks = self._load_sample(idx, train_rgb_files, support_pose_ids)
+        query_images, query_depths, query_masks = self._load_sample(idx, train_rgb_files, query_pose_ids)
+
+        #print(query_images.shape, query_depths.shape, query_masks.shape)
+        #print(support_images.shape, support_depths.shape, support_masks.shape)
+
         #print(images.shape, depths.shape, masks.shape)
+
+        return {
+            "support_images": support_images,
+            "support_depths": support_depths,
+            "support_masks": support_masks,
+            "query_images": query_images,
+            "query_depths": query_depths,
+            "query_masks": query_masks,
+        }
+        """
         return {
             'images': images,
             'depths': depths,
             'masks': masks
-        }        
+        }
+        """
+
+    def _load_sample(self, idx, rgb_files, pose_ids):
+        image_list = [rgb_files[i].split('/')[-1] for i in pose_ids]
+        datadir = self.scene_dir[idx]
+
+        images = load_rgbs(image_list, os.path.join(datadir, 'images'),
+                           self.depth_H, self.depth_W, is_png=True)
+        depths, masks = load_colmap(image_list, datadir,
+                                    self.depth_H, self.depth_W)
+        
+        depths = torch.from_numpy(depths)
+        masks = torch.from_numpy(masks)
+
+        return images, depths, masks
 
 
 if __name__ == "__main__":

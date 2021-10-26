@@ -104,5 +104,13 @@ def config_parser():
                          help='The number of source view images')
     parser.add_argument("--workers", type=int, default=8,
                         help='n cpu workers for dataloader')
+    parser.add_argument("--update_step", type=int, default=5,
+                        help='steps for inner loop.')
+    #meta_lr/update_lr
+    parser.add_argument("--meta_lr", type=float, default=1e-5,
+                        help='learning rate for meta update.')
+    parser.add_argument("--update_lr", type=float, default=1e-2,
+                        help='learning rate for inner loop update.')
+
 
     return parser
