@@ -86,13 +86,14 @@ def train(args):
     val_dataset = DTUMVSNeRFDataset(args, mode="val")
 
     train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=args.n_tasks,
-                                               num_workers=args.workers,
-                                               pin_memory=True,
+                                               num_workers=24,#args.workers,
+                                               pin_memory=False,
                                                shuffle=True)
     val_loader =  torch.utils.data.DataLoader(val_dataset, batch_size=1,
-                                               num_workers=args.workers,
-                                               pin_memory=True,
+                                               num_workers=1,#args.workers,
+                                               pin_memory=False,
                                                shuffle=True)
+    train_loader = iter(cycle(train_loader))
     val_loader_iterator = iter(cycle(val_loader))
     # Model.
     #depth_model, global_step_depth, optimizer_depth = create_depth_model(args)
@@ -110,58 +111,58 @@ def train(args):
     start = global_step_depth + 1
 
     while global_step_depth < n_training_steps - start:
-        for train_data in train_loader:
-            query_images = train_data["query_images"].to(device=device)[:, 0]
-            query_depths = train_data["query_depths"].to(device=device)[:, 0]
-            query_masks = train_data["query_masks"].to(device=device)[:, 0]
+        #for train_data in train_loader:
+        train_data = next(train_loader)
+        query_images = train_data["query_images"].to(device=device)[:, 0]
+        query_depths = train_data["query_depths"].to(device=device)[:, 0]
+        query_masks = train_data["query_masks"].to(device=device)[:, 0]
 
-            query_sz = query_images.shape[1]
+        query_sz = query_images.shape[1]
+        #import pdb; pdb.set_trace()
+        # Forward query images.
+        query_preds = depth_model(query_images, vars=None)
+        loss_q = compute_depth_loss(query_preds, query_depths, query_masks)
+        #grad = torch.autograd.grad(loss, depth_model.parameters())
+
+        # optimize theta parameters
+        meta_optimizer.zero_grad()
+        loss_q.backward()
+        meta_optimizer.step()
+
+        global_step_depth += 1
+
+        if global_step_depth % 10 == 0:
+            print(global_step_depth, loss_q.item())
+
+        if global_step_depth % save_step == 0:
+            # Summary writers
+            path = os.path.join(save_dir, 'checkpoints', '{:06d}.tar'.format(global_step_depth))
+            torch.save({
+                'global_step': global_step_depth,
+                'net_state_dict': depth_model.state_dict(),
+                'optimizer_state_dict': meta_optimizer.state_dict(),
+            }, path)
+            print('Saved checkpoints at', path)
+
+        if global_step_depth % vis_step == 0:
+            # vis training images
             #import pdb; pdb.set_trace()
-            # Forward query images.
-            query_preds = depth_model(query_images, vars=None)
-            loss_q = compute_depth_loss(query_preds, query_depths, query_masks)
-            #grad = torch.autograd.grad(loss, depth_model.parameters())
+            vis_func(query_images[0], query_preds[0], 'train', save_dir, global_step_depth)
 
+            # vis test images
+            #torch.cuda.empty_cache()
+            #net = deepcopy(depth_model)
+            depth_model.eval()
+            val_data = next(val_loader_iterator)
+
+            query_images_i = val_data["query_images"].to(device=device)[0]
+            query_depths_i = val_data["query_depths"].to(device=device)[0]
+            query_masks_i = val_data["query_masks"].to(device=device)[0]
             
-            # optimize theta parameters
-            meta_optimizer.zero_grad()
-            loss_q.backward()
-            meta_optimizer.step()
-
-            global_step_depth += 1
-
-            if global_step_depth % 10 == 0:
-                print(global_step_depth, loss_q.item())
-
-            if global_step_depth % save_step == 0:
-                # Summary writers
-                path = os.path.join(save_dir, 'checkpoints', '{:06d}.tar'.format(global_step_depth))
-                torch.save({
-                    'global_step': global_step_depth,
-                    'net_state_dict': depth_model.state_dict(),
-                    'optimizer_state_dict': meta_optimizer.state_dict(),
-                }, path)
-                print('Saved checkpoints at', path)
-
-            if global_step_depth % vis_step == 0:
-                # vis training images
-                #import pdb; pdb.set_trace()
-                vis_func(query_images[0], query_preds[0], 'train', save_dir, global_step_depth)
-
-                # vis test images
-                #torch.cuda.empty_cache()
-                #net = deepcopy(depth_model)
-                depth_model.eval()
-                val_data = next(val_loader_iterator)
-
-                query_images_i = val_data["query_images"].to(device=device)[0]
-                query_depths_i = val_data["query_depths"].to(device=device)[0]
-                query_masks_i = val_data["query_masks"].to(device=device)[0]
-                
-                
-                with torch.no_grad():
-                    query_preds_i = depth_model(query_images_i, vars=None)
-                    vis_func(query_images_i[0], query_preds_i, 'val'.format(update_step), save_dir, global_step_depth)
+            
+            with torch.no_grad():
+                query_preds_i = depth_model(query_images_i, vars=None)
+                vis_func(query_images_i[0], query_preds_i, 'val'.format(update_step), save_dir, global_step_depth)
 
                 #del net
     print('depths prior training done!')

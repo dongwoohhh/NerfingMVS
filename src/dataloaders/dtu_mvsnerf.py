@@ -91,11 +91,13 @@ class DTUMVSNeRFDataset(Dataset):
         return len(self.scene_dir)
     
     def __getitem__(self, idx):
+        #import time
+        #t = time.time()
         render_pose = self.render_poses[idx]
         depth_range = self.render_depth_range[idx]
         mean_depth = np.mean(depth_range)
         world_center = (render_pose.dot(np.array([[0, 0, mean_depth, 1]]).T)).flatten()[:3]
-
+        #print(time.time() - t)
         train_set_id = self.render_train_set_ids[idx]
         train_rgb_files = self.train_rgb_files[train_set_id]
         train_poses = self.train_poses[train_set_id]
@@ -112,12 +114,12 @@ class DTUMVSNeRFDataset(Dataset):
                                                 tar_id=id_render,
                                                 angular_dist_method='dist',
                                                 scene_center=world_center)
-        
         #nearest_pose_ids = np.random.choice(nearest_pose_ids, min(num_select, len(nearest_pose_ids)), replace=False)
 
         nearest_pose_ids = np.random.choice(nearest_pose_ids, num_select, replace=False)
         support_pose_ids = nearest_pose_ids[:self.num_source_views]
         query_pose_ids = nearest_pose_ids[self.num_source_views:]
+
 
         support_images, support_depths, support_masks = self._load_sample(idx, train_rgb_files, support_pose_ids)
         query_images, query_depths, query_masks = self._load_sample(idx, train_rgb_files, query_pose_ids)
@@ -146,6 +148,7 @@ class DTUMVSNeRFDataset(Dataset):
 
     def _load_sample(self, idx, rgb_files, pose_ids):
         image_list = [rgb_files[i].split('/')[-1] for i in pose_ids]
+
         datadir = self.scene_dir[idx]
 
         images = load_rgbs(image_list, os.path.join(datadir, 'images'),
