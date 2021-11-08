@@ -30,7 +30,7 @@ from utils.io_utils import *
 
 
 
-class NerfSyntheticDataset(Dataset):
+class NerfLLFFDataset(Dataset):
     def __init__(self, args, mode,
                  # scenes=('chair', 'drum', 'lego', 'hotdog', 'materials', 'mic', 'ship'),
                  scenes=(), **kwargs):
@@ -45,14 +45,15 @@ class NerfSyntheticDataset(Dataset):
 
         self.mode = mode
 
-        self.datadir = os.path.join(args.datadir, 'data/nerf_synthetic/')
+        self.datadir = os.path.join(args.datadir, 'data/nerf_llff_data/')
 
         scenedir = [x for x in glob.glob(os.path.join(self.datadir, "*")) if os.path.isdir(x)]
 
-        #scenes = ('chair', 'drums', 'lego', 'hotdog', 'materials', 'mic', 'ship')        
+        scenes = ('leaves')
         all_scenes = []
         for scene in scenedir:
-            all_scenes.append((scene.split('/')[-1], scene))
+            if scene.split('/')[-1] in scenes:
+                all_scenes.append((scene.split('/')[-1], scene))
         self.all_scenes = all_scenes
 
         self.render_rgb_files = []
@@ -133,7 +134,7 @@ class NerfSyntheticDataset(Dataset):
         nearest_pose_ids = np.random.choice(nearest_pose_ids, num_select, replace=False)
         support_pose_ids = nearest_pose_ids[:self.num_source_views]
         query_pose_ids = nearest_pose_ids[self.num_source_views:]
-
+        #print(train_rgb_files)
         support_images, support_depths, support_masks = self._load_sample(idx, train_rgb_files, support_pose_ids)
         query_images, query_depths, query_masks = self._load_sample(idx, train_rgb_files, query_pose_ids)
 
@@ -171,11 +172,11 @@ if __name__ == "__main__":
     args.datadir = "/media/hdd1/Datasets/ibrnet_NerfingMVS"
     #args.list_prefix = 'pixelnerf'
     args.factor = 2
-    args.num_source_views = 10
+    args.num_source_views = 4
     args.depth_H = 400#800
     args.depth_W = 400#800
 
-    dataset = NerfSyntheticDataset(args, mode='train')
+    dataset = NerfLLFFDataset(args, mode='train')
     for data in dataset:
         print('hello')
         print(data["support_images"].shape, data["support_depths"].shape, data["support_masks"].shape)
