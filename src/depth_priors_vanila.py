@@ -134,6 +134,7 @@ def train(args):
     train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=args.n_tasks,
                                                num_workers=24,#args.workers,
                                                pin_memory=False,
+                                               sampler=train_sampler,
                                                shuffle=True if train_sampler is None else False)
     val_loader =  torch.utils.data.DataLoader(val_dataset, batch_size=1,
                                                num_workers=1,#args.workers,
