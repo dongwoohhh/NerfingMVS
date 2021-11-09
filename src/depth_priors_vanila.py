@@ -15,6 +15,9 @@ from utils.io_utils import *
 from utils.depth_priors_utils import *
 
 from .dataloaders.dtu_mvsnerf import DTUMVSNeRFDataset
+from .dataloaders.nerf_llff_data import NerfLLFFDataset
+from .dataloaders.nerf_synthetic import NerfSyntheticDataset
+
 
 from    copy import deepcopy
 
@@ -78,17 +81,37 @@ def cycle(iterable):
             yield x
 
 
+def create_training_dataset(args):
+    weights = [0.5, 0.3, 0.2]
+    dtu_train = DTUMVSNeRFDataset(args, mode="train")
+    dtu_val = DTUMVSNeRFDataset(args, mode="val")
+
+    synthetic_train = NerfSyntheticDataset(args, mode="train")
+    synthetic_val = NerfSyntheticDataset(args, mode="val")
+
+    llff_train = NerfLLFFDataset(args, mode="train")
+    llff_val = NerfLLFFDataset(args, mode="val")
+
+    train_dataset = torch.utils.data.ConcatDataset([dtu_train, synthetic_train, llff_train])
+    val_dataset = torch.utils.data.ConcatDataset([dtu_val, synthetic_val, llff_val])
+
+    train_sampler = torch.utils.data.WeightedRandomSampler(weights, len(weights))
+
+    return train_dataset, val_dataset, train_sampler
+
 def train(args):
     print('Depths prior training begins !')
     
     # Dataloader.
-    train_dataset = DTUMVSNeRFDataset(args, mode="train")
-    val_dataset = DTUMVSNeRFDataset(args, mode="val")
+
+    #train_dataset = DTUMVSNeRFDataset(args, mode="train")
+    #val_dataset = DTUMVSNeRFDataset(args, mode="val")
+    train_dataset, val_dataset, train_sampler = create_training_dataset(args)
 
     train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=args.n_tasks,
                                                num_workers=24,#args.workers,
                                                pin_memory=False,
-                                               shuffle=True)
+                                               shuffle=True if train_sampler is None else False)
     val_loader =  torch.utils.data.DataLoader(val_dataset, batch_size=1,
                                                num_workers=1,#args.workers,
                                                pin_memory=False,
