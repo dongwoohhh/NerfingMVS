@@ -142,11 +142,14 @@ def train(args):
                                                shuffle=True)
     train_loader = iter(cycle(train_loader))
     val_loader_iterator = iter(cycle(val_loader))
+
     # Model.
-    #depth_model, global_step_depth, optimizer_depth = create_depth_model(args)
     depth_model, global_step_depth, meta_optimizer = create_depth_model(args)
 
     save_dir = os.path.join(args.basedir, args.expname, 'depth_priors')
+
+    # Summary.
+    writer = SummaryWriter(log_dir=os.path.join(save_dir, 'summary'))
 
     update_step = args.update_step
 
@@ -180,6 +183,7 @@ def train(args):
 
         if global_step_depth % 10 == 0:
             print(global_step_depth, loss_q.item())
+            writer.add_scalar("Loss/train", loss_q.item(), global_step_depth)
 
         if global_step_depth % save_step == 0:
             # Summary writers
@@ -205,11 +209,13 @@ def train(args):
             query_images_i = val_data["query_images"].to(device=device)[0]
             query_depths_i = val_data["query_depths"].to(device=device)[0]
             query_masks_i = val_data["query_masks"].to(device=device)[0]
-            
-            
+
             with torch.no_grad():
                 query_preds_i = depth_model(query_images_i, vars=None)
+                loss_val = compute_depth_loss(query_preds_i.unsqueeze(0), query_depths_i, query_masks_i)
+
                 vis_func(query_images_i[0], query_preds_i, 'val'.format(update_step), save_dir, global_step_depth)
+                writer.add_scalar("Loss/val", loss_val.item(), global_step_depth)
 
                 #del net
     print('depths prior training done!')
