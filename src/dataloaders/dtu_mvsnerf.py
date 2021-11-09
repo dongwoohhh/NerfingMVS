@@ -2,7 +2,7 @@ import os, sys
 
 sys.path.append('../..')
 
-from .data_utils import rectify_inplane_rotation, random_crop, random_flip, get_nearest_pose_ids
+from .data_utils import rectify_inplane_rotation, random_crop_depth, random_flip_depth, get_nearest_pose_ids
 from .llff_data_utils import load_llff_data, batch_parse_llff_poses
 
 import numpy as np
@@ -14,13 +14,14 @@ from utils.io_utils import *
 
 
 class DTUMVSNeRFDataset(Dataset):
-    def __init__(self, args, mode, **kwargs):
+    def __init__(self, args, mode, random_crop=True, **kwargs):
         self.args = args
         self.datadir = args.datadir
         list_prefix = args.list_prefix
 
         self.num_source_views = args.num_source_views
         self.rectify_inplane_rotation = False
+        self.random_crop = random_crop
 
         self.depth_H = args.depth_H
         self.depth_W = args.depth_W
@@ -127,6 +128,13 @@ class DTUMVSNeRFDataset(Dataset):
         support_images, support_depths, support_masks = self._load_sample(idx, train_rgb_files, support_pose_ids)
         query_images, query_depths, query_masks = self._load_sample(idx, train_rgb_files, query_pose_ids)
 
+        if self.mode == 'train' and self.random_crop:
+            support_images, support_depths, support_masks = random_crop_depth(support_images, support_depths, support_masks, size=(self.depth_H, self.depth_W))
+            query_images, query_depths, query_masks = random_crop_depth(query_images, query_depths, query_masks, size=(self.depth_H, self.depth_W))
+
+        if self.mode == 'train' and np.random.choice([0, 1], p=[0.5, 0.5]):
+            support_images, support_depths, support_masks = random_flip_depth(support_images, support_depths, support_masks,)
+            query_images, query_depths, query_masks = random_flip_depth(query_images, query_depths, query_masks,)
         #print(query_images.shape, query_depths.shape, query_masks.shape)
         #print(support_images.shape, support_depths.shape, support_masks.shape)
         
@@ -151,17 +159,19 @@ class DTUMVSNeRFDataset(Dataset):
 
     def _load_sample(self, idx, rgb_files, pose_ids):
         image_list = [rgb_files[i].split('/')[-1] for i in pose_ids]
-
         datadir = self.scene_dir[idx]
 
         images = load_rgbs(image_list, os.path.join(datadir, 'images'),
-                           self.depth_H, self.depth_W, is_png=True)
+                           None, None, is_png=False)
+        image_H = images.shape[2]
+        image_W = images.shape[3]
+
         depths, masks = load_colmap(image_list, datadir,
-                                    self.depth_H, self.depth_W)
+                                    image_H, image_W)
         
         depths = torch.from_numpy(depths)
         masks = torch.from_numpy(masks)
-        #print(datadir, masks.sum())
+
         return images, depths, masks
 
 

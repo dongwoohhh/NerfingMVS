@@ -321,6 +321,23 @@ def get_sparse_pose_ids(ref_poses, num_select,):
     return selected_ids
 """
 
+def random_crop_depth(image, depth, mask, size):
+    h, w = image.shape[2:4]
+    out_h, out_w = size[0], size[1]
 
+    center_h = np.random.randint(low=out_h // 2 + 1, high=h - out_h // 2 - 1)
+    center_w = np.random.randint(low=out_w // 2 + 1, high=w - out_w // 2 - 1)
 
-        
+    image_crop = image[:, :, center_h - out_h // 2:center_h + out_h // 2, center_w - out_w // 2:center_w + out_w // 2]
+    depth_crop = depth[:, center_h - out_h // 2:center_h + out_h // 2, center_w - out_w // 2:center_w + out_w // 2]
+    mask_crop = mask[:, center_h - out_h // 2:center_h + out_h // 2, center_w - out_w // 2:center_w + out_w // 2]
+
+    return image_crop, depth_crop, mask_crop
+
+def random_flip_depth(image, depth, mask):
+
+    image_flip = torch.flip(image, dims=[-1])
+    depth_flip = torch.flip(depth, dims=[-1])
+    mask_flip = torch.flip(mask, dims=[-1])
+
+    return image_flip, depth_flip, mask_flip
