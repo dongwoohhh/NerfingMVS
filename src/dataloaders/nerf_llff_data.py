@@ -49,7 +49,7 @@ class NerfLLFFDataset(Dataset):
 
         scenedir = [x for x in glob.glob(os.path.join(self.datadir, "*")) if os.path.isdir(x)]
 
-        scenes = ('leaves')
+        scenes = ('fern', 'flower', 'horns', 'room', 'orchids', 'leaves', 'fortress', 'trex')
         all_scenes = []
         for scene in scenedir:
             if scene.split('/')[-1] in scenes:
@@ -134,7 +134,7 @@ class NerfLLFFDataset(Dataset):
         nearest_pose_ids = np.random.choice(nearest_pose_ids, num_select, replace=False)
         support_pose_ids = nearest_pose_ids[:self.num_source_views]
         query_pose_ids = nearest_pose_ids[self.num_source_views:]
-        #print(train_rgb_files)
+
         support_images, support_depths, support_masks = self._load_sample(idx, train_rgb_files, support_pose_ids)
         query_images, query_depths, query_masks = self._load_sample(idx, train_rgb_files, query_pose_ids)
 
@@ -155,9 +155,8 @@ class NerfLLFFDataset(Dataset):
     def _load_sample(self, idx, rgb_files, pose_ids):
         image_list = [rgb_files[i].split('/')[-1] for i in pose_ids]
         datadir = self.scene_dir[idx]
-
         images = load_rgbs(image_list, os.path.join(datadir, 'images'),
-                           self.depth_H, self.depth_W, is_png=True)
+                           self.depth_H, self.depth_W, is_png=False)
         depths, masks = load_colmap(image_list, datadir,
                                     self.depth_H, self.depth_W)
         
