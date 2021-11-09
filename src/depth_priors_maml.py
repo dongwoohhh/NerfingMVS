@@ -15,6 +15,10 @@ from utils.io_utils import *
 from utils.depth_priors_utils import *
 
 from .dataloaders.dtu_mvsnerf import DTUMVSNeRFDataset
+from .dataloaders.nerf_llff_data import NerfLLFFDataset
+from .dataloaders.nerf_synthetic import NerfSyntheticDataset
+from .dataloaders.ibrnet_collected import IBRNetCollectedDataset
+
 
 from    copy import deepcopy
 
@@ -78,27 +82,74 @@ def cycle(iterable):
             yield x
 
 
+def create_training_dataset(args):
+    train_dataset_names = ['dtu', 'synthetic', 'ibr']
+    weights = [0.34, 0.33, 0.33]
+    #dtu_train = DTUMVSNeRFDataset(args, mode="train")
+    dtu_val = DTUMVSNeRFDataset(args, mode="val")
+
+    #synthetic_train = NerfSyntheticDataset(args, mode="train")
+    synthetic_val = NerfSyntheticDataset(args, mode="val")
+
+    #llff_train = NerfLLFFDataset(args, mode="train")
+    llff_val = NerfLLFFDataset(args, mode="val")
+
+    #ibr_train = IBRNetCollectedDataset(args, mode="train")
+    ibr_val = IBRNetCollectedDataset(args, mode="val")
+
+    dataset_dict = {
+        'dtu': DTUMVSNeRFDataset,
+        'synthetic': NerfSyntheticDataset,
+        'llff': NerfLLFFDataset,
+        'ibr': IBRNetCollectedDataset,
+    }
+    train_datasets = []
+    train_weights_samples = []
+    for training_dataset_name, weight in zip(train_dataset_names, weights):
+        train_dataset = dataset_dict[training_dataset_name](args, mode='train')
+        train_datasets.append(train_dataset)
+        num_samples = len(train_dataset)
+        weight_each_sample = weight / num_samples
+        train_weights_samples.extend([weight_each_sample]*num_samples)
+
+
+    train_dataset = torch.utils.data.ConcatDataset(train_datasets)
+    train_weights = torch.from_numpy(np.array(train_weights_samples))
+    train_sampler = torch.utils.data.WeightedRandomSampler(train_weights, len(train_weights))
+
+    val_dataset = torch.utils.data.ConcatDataset([dtu_val, synthetic_val, llff_val, ibr_val])
+
+
+    return train_dataset, val_dataset, train_sampler
+
 def train(args):
     print('Depths prior training begins !')
     
     # Dataloader.
-    train_dataset = DTUMVSNeRFDataset(args, mode="train")
-    val_dataset = DTUMVSNeRFDataset(args, mode="val")
+
+    #train_dataset = DTUMVSNeRFDataset(args, mode="train")
+    #val_dataset = DTUMVSNeRFDataset(args, mode="val")
+    train_dataset, val_dataset, train_sampler = create_training_dataset(args)
 
     train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=args.n_tasks,
                                                num_workers=args.workers,
-                                               pin_memory=True,
-                                               shuffle=True)
+                                               pin_memory=False,
+                                               sampler=train_sampler,
+                                               shuffle=True if train_sampler is None else False)
     val_loader =  torch.utils.data.DataLoader(val_dataset, batch_size=1,
-                                               num_workers=args.workers,
-                                               pin_memory=True,
+                                               num_workers=1,#args.workers,
+                                               pin_memory=False,
                                                shuffle=True)
+    train_loader = iter(cycle(train_loader))
     val_loader_iterator = iter(cycle(val_loader))
+
     # Model.
-    #depth_model, global_step_depth, optimizer_depth = create_depth_model(args)
     depth_model, global_step_depth, meta_optimizer = create_depth_model(args)
 
     save_dir = os.path.join(args.basedir, args.expname, 'depth_priors')
+
+    # Summary.
+    writer = SummaryWriter(log_dir=os.path.join(save_dir, 'summary'))
 
     update_step = args.update_step
 
@@ -110,144 +161,147 @@ def train(args):
     start = global_step_depth + 1
 
     while global_step_depth < n_training_steps - start:
-        for train_data in train_loader:
+        #for train_data in train_loader:
+        train_data = next(train_loader)
+        support_images = train_data["support_images"].to(device=device)
+        support_depths = train_data["support_depths"].to(device=device)
+        support_masks = train_data["support_masks"].to(device=device)
 
-            support_images = train_data["support_images"].to(device=device)
-            support_depths = train_data["support_depths"].to(device=device)
-            support_masks = train_data["support_masks"].to(device=device)
+        query_images = train_data["query_images"].to(device=device)
+        query_depths = train_data["query_depths"].to(device=device)
+        query_masks = train_data["query_masks"].to(device=device)
 
-            query_images = train_data["query_images"].to(device=device)
-            query_depths = train_data["query_depths"].to(device=device)
-            query_masks = train_data["query_masks"].to(device=device)
+        task_num = support_images.shape[0]
+        query_sz = query_images.shape[1]
 
-            task_num = support_images.shape[0]
-            query_sz = query_images.shape[1]
+        losses_q = [0 for _ in range(update_step + 1)]
+        # Inner loop
+        for i_task in range(task_num):
+            support_images_i = support_images[i_task]
+            support_depths_i = support_depths[i_task]
+            support_masks_i = support_masks[i_task]
 
-            losses_q = [0 for _ in range(update_step + 1)]
-            # Inner loop
-            for i_task in range(task_num):
-                support_images_i = support_images[i_task]
-                support_depths_i = support_depths[i_task]
-                support_masks_i = support_masks[i_task]
+            query_images_i = query_images[i_task]
+            query_depths_i = query_depths[i_task]
+            query_masks_i = query_masks[i_task]
+            #import pdb; pdb.set_trace()
+            """
+            sum = 0
+            for t in depth_model.parameters():
+                sum+= t.sum()
+            print(sum)
+            """
+            # 1. run the i-th task and compute loss for k=0
+            support_preds_i = depth_model(support_images_i, vars=None)
+            support_loss_i = compute_depth_loss(support_preds_i, support_depths_i, support_masks_i)
+            grad = torch.autograd.grad(support_loss_i, depth_model.parameters())
+            fast_weights = update_inner_loop(depth_model.vars, grad, args.update_lr)
 
-                query_images_i = query_images[i_task]
-                query_depths_i = query_depths[i_task]
-                query_masks_i = query_masks[i_task]
-                #import pdb; pdb.set_trace()
-                """
-                sum = 0
-                for t in depth_model.parameters():
-                    sum+= t.sum()
-                print(sum)
-                """
-                # 1. run the i-th task and compute loss for k=0
-                support_preds_i = depth_model(support_images_i, vars=None)
+            # this is the loss and accuracy before first update.
+            with torch.no_grad():
+                query_preds_i = depth_model (query_images_i, vars=depth_model.vars)
+                query_loss_i = compute_depth_loss(query_preds_i, query_depths_i, query_masks_i)
+                losses_q[0] += query_loss_i
+            
+            # this is the loss and accuracy after the first update.
+            with torch.no_grad():
+                query_preds_i = depth_model (query_images_i, vars=fast_weights)
+                query_loss_i = compute_depth_loss(query_preds_i, query_depths_i, query_masks_i)
+                losses_q[1] += query_loss_i
+            
+            for k in range(1, update_step):
+                # 1. run the i-th task and compute loss for k=1~K-1
+                support_preds_i = depth_model(support_images_i, vars=fast_weights)
                 support_loss_i = compute_depth_loss(support_preds_i, support_depths_i, support_masks_i)
-                grad = torch.autograd.grad(support_loss_i, depth_model.parameters())
+                # 2. compute grad on theta_pi
+                grad = torch.autograd.grad(support_loss_i, fast_weights.values())
+                # 3. theta_pi = theta_pi - train_lr * grad
                 fast_weights = update_inner_loop(depth_model.vars, grad, args.update_lr)
 
-                # this is the loss and accuracy before first update.
-                with torch.no_grad():
-                    query_preds_i = depth_model (query_images_i, vars=depth_model.vars)
-                    query_loss_i = compute_depth_loss(query_preds_i, query_depths_i, query_masks_i)
-                    losses_q[0] += query_loss_i
-                
-                # this is the loss and accuracy after the first update.
-                with torch.no_grad():
-                    query_preds_i = depth_model (query_images_i, vars=fast_weights)
-                    query_loss_i = compute_depth_loss(query_preds_i, query_depths_i, query_masks_i)
-                    losses_q[1] += query_loss_i
-                
-                for k in range(1, update_step):
-                    # 1. run the i-th task and compute loss for k=1~K-1
-                    support_preds_i = depth_model(support_images_i, vars=fast_weights)
-                    support_loss_i = compute_depth_loss(support_preds_i, support_depths_i, support_masks_i)
-                    # 2. compute grad on theta_pi
-                    grad = torch.autograd.grad(support_loss_i, fast_weights.values())
-                    # 3. theta_pi = theta_pi - train_lr * grad
-                    fast_weights = update_inner_loop(depth_model.vars, grad, args.update_lr)
+                query_preds_i = depth_model(query_images_i, vars=fast_weights)
+                # loss_q will be overwritten and just keep the loss_q on last update step.
+                query_loss_i = compute_depth_loss(query_preds_i, query_depths_i, query_masks_i)
+                losses_q[k + 1] += query_loss_i
+            """
+            sum = 0
+            for t in depth_model.parameters():
+                sum+= t.sum()
+            print(sum)
+            sum = 0
+            for t in fast_weights:
+                sum+= fast_weights[t].sum()
+            print(sum)
+            """
 
-                    query_preds_i = depth_model(query_images_i, vars=fast_weights)
-                    # loss_q will be overwritten and just keep the loss_q on last update step.
-                    query_loss_i = compute_depth_loss(query_preds_i, query_depths_i, query_masks_i)
-                    losses_q[k + 1] += query_loss_i
-                """
-                sum = 0
-                for t in depth_model.parameters():
-                    sum+= t.sum()
-                print(sum)
-                sum = 0
-                for t in fast_weights:
-                    sum+= fast_weights[t].sum()
-                print(sum)
-                """
+        # end of all tasks
+        # sum over all losses on query set across all tasks
+        loss_q = losses_q[-1] / task_num
+        
+        # optimize theta parameters
+        meta_optimizer.zero_grad()
+        loss_q.backward()
+        meta_optimizer.step()
 
-            # end of all tasks
-            # sum over all losses on query set across all tasks
-            loss_q = losses_q[-1] / task_num
+        global_step_depth += 1
+
+        if global_step_depth % 10 == 0:
+            print(global_step_depth, loss_q.item())
+            writer.add_scalar("Loss/train", loss_q.item(), global_step_depth)
+
+        if global_step_depth % save_step == 0:
+            # Summary writers
+            path = os.path.join(save_dir, 'checkpoints', '{:06d}.tar'.format(global_step_depth))
+            torch.save({
+                'global_step': global_step_depth,
+                'net_state_dict': depth_model.state_dict(),
+                'optimizer_state_dict': meta_optimizer.state_dict(),
+            }, path)
+            print('Saved checkpoints at', path)
+
+        if global_step_depth % vis_step == 0:
+            # vis training images
+            vis_func(query_images_i[0], query_preds_i[0], 'train', save_dir, global_step_depth)
+
+            # vis test images
+            #torch.cuda.empty_cache()
+            net = deepcopy(depth_model)
+            net.eval()
+            val_data = next(val_loader_iterator)
             
-            # optimize theta parameters
-            meta_optimizer.zero_grad()
-            loss_q.backward()
-            meta_optimizer.step()
+            support_images_i = val_data["support_images"].to(device=device)[0]
+            support_depths_i = val_data["support_depths"].to(device=device)[0]
+            support_masks_i = val_data["support_masks"].to(device=device)[0]
 
-            global_step_depth += 1
+            query_images_i = val_data["query_images"].to(device=device)[0]
+            query_depths_i = val_data["query_depths"].to(device=device)[0]
+            query_masks_i = val_data["query_masks"].to(device=device)[0]
+            
+            support_preds_i = net(support_images_i, vars=None)
+            support_loss_i = compute_depth_loss(support_preds_i, support_depths_i, support_masks_i)
+            grad = torch.autograd.grad(support_loss_i, net.parameters())
+            fast_weights = update_inner_loop(net.vars, grad, args.update_lr)
+        
+            with torch.no_grad():
+                query_preds_i = net(query_images_i, vars=net.vars)
+                #query_loss_i = compute_depth_loss(query_preds_i, query_depths_i, query_masks_i)
+                vis_func(query_images_i[0], query_preds_i[0], 'val_0', save_dir, global_step_depth)
 
-            if global_step_depth % 10 == 0:
-                print(global_step_depth, loss_q.item())
-
-            if global_step_depth % save_step == 0:
-                # Summary writers
-                path = os.path.join(save_dir, 'checkpoints', '{:06d}.tar'.format(global_step_depth))
-                torch.save({
-                    'global_step': global_step_depth,
-                    'net_state_dict': depth_model.state_dict(),
-                    'optimizer_state_dict': meta_optimizer.state_dict(),
-                }, path)
-                print('Saved checkpoints at', path)
-
-            if global_step_depth % vis_step == 0:
-                # vis training images
-                vis_func(query_images_i[0], query_preds_i[0], 'train', save_dir, global_step_depth)
-
-                # vis test images
-                #torch.cuda.empty_cache()
-                net = deepcopy(depth_model)
-                net.eval()
-                val_data = next(val_loader_iterator)
-                
-                support_images_i = val_data["support_images"].to(device=device)[0]
-                support_depths_i = val_data["support_depths"].to(device=device)[0]
-                support_masks_i = val_data["support_masks"].to(device=device)[0]
-
-                query_images_i = val_data["query_images"].to(device=device)[0]
-                query_depths_i = val_data["query_depths"].to(device=device)[0]
-                query_masks_i = val_data["query_masks"].to(device=device)[0]
-                
-                support_preds_i = net(support_images_i, vars=None)
+            for k in range(1, update_step):
+                # 1. run the i-th task and compute loss for k=1~K-1
+                support_preds_i = net(support_images_i, vars=fast_weights)
                 support_loss_i = compute_depth_loss(support_preds_i, support_depths_i, support_masks_i)
-                grad = torch.autograd.grad(support_loss_i, net.parameters())
+                # 2. compute grad on theta_pi
+                grad = torch.autograd.grad(support_loss_i, fast_weights.values())
+                # 3. theta_pi = theta_pi - train_lr * grad
                 fast_weights = update_inner_loop(net.vars, grad, args.update_lr)
             
-                with torch.no_grad():
-                    query_preds_i = net(query_images_i, vars=net.vars)
-                    #query_loss_i = compute_depth_loss(query_preds_i, query_depths_i, query_masks_i)
-                    vis_func(query_images_i[0], query_preds_i[0], 'val_0', save_dir, global_step_depth)
+            with torch.no_grad():
+                query_preds_i = net(query_images_i, vars=fast_weights)
+                loss_val = compute_depth_loss(query_preds_i, query_depths_i, query_masks_i)
+                vis_func(query_images_i[0], query_preds_i[0], 'val_{}'.format(update_step), save_dir, global_step_depth)
+                writer.add_scalar("Loss/val", loss_val.item(), global_step_depth)
 
-                for k in range(1, update_step):
-                    # 1. run the i-th task and compute loss for k=1~K-1
-                    support_preds_i = net(support_images_i, vars=fast_weights)
-                    support_loss_i = compute_depth_loss(support_preds_i, support_depths_i, support_masks_i)
-                    # 2. compute grad on theta_pi
-                    grad = torch.autograd.grad(support_loss_i, fast_weights.values())
-                    # 3. theta_pi = theta_pi - train_lr * grad
-                    fast_weights = update_inner_loop(net.vars, grad, args.update_lr)
-                
-                with torch.no_grad():
-                    query_preds_i = net(query_images_i, vars=fast_weights)
-                    vis_func(query_images_i[0], query_preds_i[0], 'val_{}'.format(update_step), save_dir, global_step_depth)
-
-                del net
+            del net
     print('depths prior training done!')
 
 
@@ -259,7 +313,7 @@ def vis_func(image, depth, name, save_dir, step):
     depth_np = depth.cpu().detach().numpy()
     depth_color = visualize_depth(depth_np)
 
-    cv2.imwrite(os.path.join(save_dir, 'results', '{}_{}_image.png'.format(step, name)), image_np)
+    cv2.imwrite(os.path.join(save_dir, 'results', '{}_{}_image.png'.format(step, name)), cv2.cvtColor(image_np, cv2.COLOR_RGB2BGR))
     cv2.imwrite(os.path.join(save_dir, 'results', '{}_{}_depth.png'.format(step, name)), depth_color)
 
 
