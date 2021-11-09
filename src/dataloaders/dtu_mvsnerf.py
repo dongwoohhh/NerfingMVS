@@ -28,18 +28,21 @@ class DTUMVSNeRFDataset(Dataset):
         self.mode = mode
 
         # Init paths.
-        all_scenes = [x for x in glob.glob(os.path.join(self.datadir, "*")) if os.path.isdir(x)]
+        #all_scenes = [x for x in glob.glob(os.path.join(self.datadir, "*")) if os.path.isdir(x)]
+        self.datadir = os.path.join(args.datadir, 'data/dtu/')
+
         if mode == "train":
             file_list = os.path.join(self.datadir, list_prefix+"_train.lst")
         elif mode == "val":
             file_list = os.path.join(self.datadir, list_prefix+"_val.lst")
         elif mode == "test":
             file_list = os.path.join(self.datadir, list_prefix+"_test.lst")
-
         with open(file_list, "r") as f:
-            all_scenes = [(x.strip(), os.path.join(self.datadir, x.strip())) for x in f.readlines()]
-        self.all_scenes = all_scenes
-
+            scenes = [x.strip() for x in f.readlines()]
+        all_scenes = []
+        for i, scene in enumerate(scenes):
+            all_scenes.append((scene, os.path.join(self.datadir, scene)))
+        
 
         self.render_rgb_files = []
         self.render_intrinsics = []

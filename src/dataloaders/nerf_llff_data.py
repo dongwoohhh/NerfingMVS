@@ -36,6 +36,7 @@ class NerfLLFFDataset(Dataset):
                  scenes=(), **kwargs):
         self.args = args
         self.datadir = args.datadir
+        list_prefix = args.list_prefix
 
         self.num_source_views = args.num_source_views
         self.rectify_inplane_rotation = False
@@ -47,13 +48,24 @@ class NerfLLFFDataset(Dataset):
 
         self.datadir = os.path.join(args.datadir, 'data/nerf_llff_data/')
 
-        scenedir = [x for x in glob.glob(os.path.join(self.datadir, "*")) if os.path.isdir(x)]
+        #scenedir = [x for x in glob.glob(os.path.join(self.datadir, "*")) if os.path.isdir(x)]
+        #scenes = ('fern', 'flower', 'horns', 'room', 'orchids', 'leaves', 'fortress', 'trex')
+        
+        if mode == "train":
+            file_list = os.path.join(self.datadir, list_prefix+"_train.lst")
+        elif mode == "val":
+            file_list = os.path.join(self.datadir, list_prefix+"_val.lst")
+        elif mode == "test":
+            file_list = os.path.join(self.datadir, list_prefix+"_test.lst")
+        
+        with open(file_list, "r") as f:
+            scenes = [x.strip() for x in f.readlines()]
+        #scenedir = [os.path.join(self.datadir, x) for x in scenes]
 
-        scenes = ('fern', 'flower', 'horns', 'room', 'orchids', 'leaves', 'fortress', 'trex')
         all_scenes = []
-        for scene in scenedir:
-            if scene.split('/')[-1] in scenes:
-                all_scenes.append((scene.split('/')[-1], scene))
+        for i, scene in enumerate(scenes):
+            all_scenes.append((scene, os.path.join(self.datadir, scene)))
+        
         self.all_scenes = all_scenes
 
         self.render_rgb_files = []
@@ -169,13 +181,14 @@ if __name__ == "__main__":
     from dotmap import DotMap
     args = DotMap()
     args.datadir = "/media/hdd1/Datasets/ibrnet_NerfingMVS"
-    #args.list_prefix = 'pixelnerf'
+    args.list_prefix = 'new'
     args.factor = 2
     args.num_source_views = 4
     args.depth_H = 400#800
     args.depth_W = 400#800
 
     dataset = NerfLLFFDataset(args, mode='train')
+    print('hello')
     for data in dataset:
         print('hello')
         print(data["support_images"].shape, data["support_depths"].shape, data["support_masks"].shape)

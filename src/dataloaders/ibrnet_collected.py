@@ -33,6 +33,7 @@ class IBRNetCollectedDataset(Dataset):
     def __init__(self, args, mode, random_crop=True, **kwargs):
         self.args = args
         self.datadir = args.datadir
+        list_prefix = args.list_prefix
 
         self.num_source_views = args.num_source_views
         self.rectify_inplane_rotation = False
@@ -46,12 +47,22 @@ class IBRNetCollectedDataset(Dataset):
 
         self.datadir = os.path.join(args.datadir, 'data/ibrnet_collected_1/')
 
-        scenedir = [x for x in glob.glob(os.path.join(self.datadir, "*")) if os.path.isdir(x)]
+        #scenedir = [x for x in glob.glob(os.path.join(self.datadir, "*")) if os.path.isdir(x)]
+
+        if mode == "train":
+            file_list = os.path.join(self.datadir, list_prefix+"_train.lst")
+        elif mode == "val":
+            file_list = os.path.join(self.datadir, list_prefix+"_val.lst")
+        elif mode == "test":
+            file_list = os.path.join(self.datadir, list_prefix+"_test.lst")
+        
+        with open(file_list, "r") as f:
+            scenes = [x.strip() for x in f.readlines()]
+        #scenedir = [os.path.join(self.datadir, x) for x in scenes]
 
         all_scenes = []
-        for scene in scenedir:
-            all_scenes.append((scene.split('/')[-1], scene))
-        self.all_scenes = all_scenes
+        for i, scene in enumerate(scenes):
+            all_scenes.append((scene, os.path.join(self.datadir, scene)))
 
         self.render_rgb_files = []
         self.render_intrinsics = []
@@ -171,7 +182,7 @@ class IBRNetCollectedDataset(Dataset):
         
         depths = torch.from_numpy(depths)
         masks = torch.from_numpy(masks)
-        #print(datadir, masks.sum())
+
         return images, depths, masks
 
 
@@ -179,9 +190,9 @@ if __name__ == "__main__":
     from dotmap import DotMap
     args = DotMap()
     args.datadir = "/media/hdd1/Datasets/ibrnet_NerfingMVS"
-    #args.list_prefix = 'pixelnerf'
+    args.list_prefix = 'new'
     args.factor = 2
-    args.num_source_views = 10
+    args.num_source_views = 4
     args.depth_H = 400#800
     args.depth_W = 400#800
 

@@ -97,6 +97,7 @@ def load_rgbs(image_list, datadir, H=None, W=None, is_png=False):
             image_name = image_name.replace('.jpg', '.png')
         rgb_path = os.path.join(datadir, image_name)
         rgb = pil_loader(rgb_path)
+    
         if H is not None:
             rgb = resize(rgb)
 

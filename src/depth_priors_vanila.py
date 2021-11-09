@@ -17,6 +17,7 @@ from utils.depth_priors_utils import *
 from .dataloaders.dtu_mvsnerf import DTUMVSNeRFDataset
 from .dataloaders.nerf_llff_data import NerfLLFFDataset
 from .dataloaders.nerf_synthetic import NerfSyntheticDataset
+from .dataloaders.ibrnet_collected import IBRNetCollectedDataset
 
 
 from    copy import deepcopy
@@ -82,20 +83,42 @@ def cycle(iterable):
 
 
 def create_training_dataset(args):
-    weights = [0.5, 0.3, 0.2]
-    dtu_train = DTUMVSNeRFDataset(args, mode="train")
+    train_dataset_names = ['dtu', 'synthetic', 'ibr']
+    weights = [0.34, 0.33, 0.33]
+    #dtu_train = DTUMVSNeRFDataset(args, mode="train")
     dtu_val = DTUMVSNeRFDataset(args, mode="val")
 
-    synthetic_train = NerfSyntheticDataset(args, mode="train")
+    #synthetic_train = NerfSyntheticDataset(args, mode="train")
     synthetic_val = NerfSyntheticDataset(args, mode="val")
 
-    llff_train = NerfLLFFDataset(args, mode="train")
+    #llff_train = NerfLLFFDataset(args, mode="train")
     llff_val = NerfLLFFDataset(args, mode="val")
 
-    train_dataset = torch.utils.data.ConcatDataset([dtu_train, synthetic_train, llff_train])
-    val_dataset = torch.utils.data.ConcatDataset([dtu_val, synthetic_val, llff_val])
+    #ibr_train = IBRNetCollectedDataset(args, mode="train")
+    ibr_val = IBRNetCollectedDataset(args, mode="val")
 
-    train_sampler = torch.utils.data.WeightedRandomSampler(weights, len(weights))
+    dataset_dict = {
+        'dtu': DTUMVSNeRFDataset,
+        'synthetic': NerfSyntheticDataset,
+        'llff': NerfLLFFDataset,
+        'ibr': IBRNetCollectedDataset,
+    }
+    train_datasets = []
+    train_weights_samples = []
+    for training_dataset_name, weight in zip(train_dataset_names, weights):
+        train_dataset = dataset_dict[training_dataset_name](args, mode='train')
+        train_datasets.append(train_dataset)
+        num_samples = len(train_dataset)
+        weight_each_sample = weight / num_samples
+        train_weights_samples.extend([weight_each_sample]*num_samples)
+
+
+    train_dataset = torch.utils.data.ConcatDataset(train_datasets)
+    train_weights = torch.from_numpy(np.array(train_weights_samples))
+    train_sampler = torch.utils.data.WeightedRandomSampler(train_weights, len(train_weights))
+
+    val_dataset = torch.utils.data.ConcatDataset([dtu_val, synthetic_val, llff_val, ibr_val])
+
 
     return train_dataset, val_dataset, train_sampler
 
