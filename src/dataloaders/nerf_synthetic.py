@@ -181,14 +181,55 @@ class NerfSyntheticDataset(Dataset):
                            None, None, is_png=False)
         image_H = images.shape[2]
         image_W = images.shape[3]
-
-        depths, masks = load_colmap(image_list, datadir,
-                                    image_H, image_W)
         
-        depths = torch.from_numpy(depths)
-        masks = torch.from_numpy(masks)
+        # Save depth binary to detph image.
+        #print(datadir)
+        depthdir = os.path.join(datadir, 'depth')
+        if not os.path.exists(depthdir):
+            os.mkdir(depthdir)
+
+        
+        flag_all_exists = True
+        depths = []
+        masks = []
+        for image_name in image_list:
+            #depth_path = os.path.join(datadir, 'dense/stereo/depth_maps', image_name + '.geometric.bin')
+            depth_path = os.path.join(depthdir, image_name+'.pt')
+        
+            if os.path.exists(depth_path):
+                data = torch.load(depth_path)
+                #depth_i = data['depth']
+                #mask_i = data['mask']
+                depth_i = data[0]
+                mask_i = data[1].bool()
+
+                depths.append(depth_i)
+                masks.append(mask_i)
+            else:
+                flag_all_exists = False
+                break
+        print(flag_all_exists)
+        if flag_all_exists:
+            depths = torch.stack(depths)
+            masks = torch.stack(masks)
+        else:
+            depths, masks = load_colmap(image_list, datadir,
+                                        image_H, image_W,)
+
+            depths = torch.from_numpy(depths)
+            masks = torch.from_numpy(masks)
+            print(depths.shape, masks.shape)
+            for i, image_name in enumerate(image_list):
+                depth_path = os.path.join(depthdir, image_name+'.pt')
+                if not os.path.exists(depth_path):
+                    print(depth_path)
+                    #print(depths[i].shape, masks[i].shape)
+                    #raise NotImplementedError
+                    depth_cat = torch.stack([depths[i], masks[i]])
+                    torch.save(depth_cat, depth_path)
 
         return images, depths, masks
+
 
 
 if __name__ == "__main__":

@@ -38,6 +38,9 @@ class IBRNetCollectedDataset(Dataset):
         self.num_source_views = args.num_source_views
         self.rectify_inplane_rotation = False
 
+        #self.img_H = 
+        #self.img_W = 
+
         self.depth_H = args.depth_H
         self.depth_W = args.depth_W
 
@@ -45,24 +48,26 @@ class IBRNetCollectedDataset(Dataset):
 
         self.random_crop = random_crop
 
-        self.datadir = os.path.join(args.datadir, 'data/ibrnet_collected_1/')
-
-        #scenedir = [x for x in glob.glob(os.path.join(self.datadir, "*")) if os.path.isdir(x)]
-
-        if mode == "train":
-            file_list = os.path.join(self.datadir, list_prefix+"_train.lst")
-        elif mode == "val":
-            file_list = os.path.join(self.datadir, list_prefix+"_val.lst")
-        elif mode == "test":
-            file_list = os.path.join(self.datadir, list_prefix+"_test.lst")
-        
-        with open(file_list, "r") as f:
-            scenes = [x.strip() for x in f.readlines()]
-        #scenedir = [os.path.join(self.datadir, x) for x in scenes]
-
         all_scenes = []
-        for i, scene in enumerate(scenes):
-            all_scenes.append((scene, os.path.join(self.datadir, scene)))
+        for data_split in ['data/ibrnet_collected_1/']:#, 'data/ibrnet_collected_2/']:
+            self.datadir = os.path.join(args.datadir, data_split)
+
+            #scenedir = [x for x in glob.glob(os.path.join(self.datadir, "*")) if os.path.isdir(x)]
+
+            if mode == "train":
+                file_list = os.path.join(self.datadir, list_prefix+"_train.lst")
+            elif mode == "val":
+                file_list = os.path.join(self.datadir, list_prefix+"_val.lst")
+            elif mode == "test":
+                file_list = os.path.join(self.datadir, list_prefix+"_test.lst")
+            
+            with open(file_list, "r") as f:
+                scenes = [x.strip() for x in f.readlines()]
+            #scenedir = [os.path.join(self.datadir, x) for x in scenes]
+
+            
+            for i, scene in enumerate(scenes):
+                all_scenes.append((scene, os.path.join(self.datadir, scene)))
 
         self.render_rgb_files = []
         self.render_intrinsics = []
@@ -178,6 +183,7 @@ class IBRNetCollectedDataset(Dataset):
             "query_masks": query_masks,
             #"scene_id":
         }
+    
     def _load_sample(self, idx, rgb_files, pose_ids):
         image_list = [rgb_files[i].split('/')[-1] for i in pose_ids]
         datadir = self.scene_dir[idx]
@@ -186,15 +192,55 @@ class IBRNetCollectedDataset(Dataset):
                            None, None, is_png=False)
         image_H = images.shape[2]
         image_W = images.shape[3]
-
-        depths, masks = load_colmap(image_list, datadir,
-                                    image_H, image_W)
         
-        depths = torch.from_numpy(depths)
-        masks = torch.from_numpy(masks)
+        # Save depth binary to detph image.
+        #print(datadir)
+        depthdir = os.path.join(datadir, 'depth')
+        if not os.path.exists(depthdir):
+            os.mkdir(depthdir)
+
+        
+        flag_all_exists = True
+        depths = []
+        masks = []
+        for image_name in image_list:
+            #depth_path = os.path.join(datadir, 'dense/stereo/depth_maps', image_name + '.geometric.bin')
+            depth_path = os.path.join(depthdir, image_name+'.pt')
+        
+            if os.path.exists(depth_path):
+                data = torch.load(depth_path)
+                #depth_i = data['depth']
+                #mask_i = data['mask']
+                depth_i = data[0]
+                mask_i = data[1].bool()
+
+                depths.append(depth_i)
+                masks.append(mask_i)
+            else:
+                flag_all_exists = False
+                break
+        print(flag_all_exists)
+        if flag_all_exists:
+            depths = torch.stack(depths)
+            masks = torch.stack(masks)
+        else:
+            print('colmap',datadir)
+            depths, masks = load_colmap(image_list, datadir,
+                                        image_H, image_W,)
+
+            depths = torch.from_numpy(depths)
+            masks = torch.from_numpy(masks)
+            print(depths.shape, masks.shape)
+            for i, image_name in enumerate(image_list):
+                depth_path = os.path.join(depthdir, image_name+'.pt')
+                if not os.path.exists(depth_path):
+                    print(depth_path)
+                    #print(depths[i].shape, masks[i].shape)
+                    #raise NotImplementedError
+                    depth_cat = torch.stack([depths[i], masks[i]])
+                    torch.save(depth_cat, depth_path)
 
         return images, depths, masks
-
 
 if __name__ == "__main__":
     from dotmap import DotMap
