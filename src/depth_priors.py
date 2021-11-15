@@ -25,6 +25,7 @@ def create_depth_model(args):
 
     start = 0
     basedir = args.basedir
+
     expname = args.expname
     ckpt_path = os.path.join(basedir, expname, 'depth_priors', 'checkpoints')
 
@@ -78,10 +79,12 @@ def train(args):
     i_batch = 0
     depth_model.train()
     start = global_step_depth + 1
+    n_images = len(image_list)
     
     for i in trange(start, N_iters_depth):
-        batch = images_train[i_batch:i_batch + N_rand_depth]
-        depth_gt, mask_gt = depths_train[i_batch:i_batch + N_rand_depth], depths_mask_train[i_batch:i_batch + N_rand_depth]
+        n_batch = min(i_batch + N_rand_depth, n_images)
+        batch = images_train[i_batch:n_batch]
+        depth_gt, mask_gt = depths_train[i_batch:n_batch], depths_mask_train[i_batch:n_batch]
         depth_pred = depth_model(batch)
         loss = compute_depth_loss(depth_pred, depth_gt, mask_gt)
 
@@ -121,13 +124,19 @@ def train(args):
     
     with torch.no_grad():
         depth_model.eval()
+        depthdir = os.path.join(args.datadir, 'depth_dense')
+        if not os.path.exists(depthdir):
+            os.mkdir(depthdir)
         for i, image_name in enumerate(image_list):
             frame_id = image_name.split('.')[0]
             batch = images[i:i + 1]
-            depth_pred = depth_model.forward(batch).cpu().numpy()
+            depth_pred = depth_model.forward(batch).cpu()
+            torch.save(depth_pred, os.path.join(depthdir, image_name+'.pt'))
+            depth_pred = depth_pred.numpy()
             depth_color = visualize_depth(depth_pred)
             cv2.imwrite(os.path.join(save_dir, 'results', '{}_depth.png'.format(frame_id)), depth_color)
             np.save(os.path.join(save_dir, 'results', '{}_depth.npy'.format(frame_id)), depth_pred)
+
     print('results have been saved in {}'.format(os.path.join(save_dir, 'results')))
 
 if __name__=='__main__':
