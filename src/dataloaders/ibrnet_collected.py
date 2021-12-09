@@ -49,7 +49,7 @@ class IBRNetCollectedDataset(Dataset):
         self.random_crop = random_crop
 
         all_scenes = []
-        for data_split in ['data/ibrnet_collected_1/']:#, 'data/ibrnet_collected_2/']:
+        for data_split in ['data/ibrnet_collected_1/', 'data/ibrnet_collected_2/']:
             self.datadir = os.path.join(args.datadir, data_split)
 
             #scenedir = [x for x in glob.glob(os.path.join(self.datadir, "*")) if os.path.isdir(x)]
@@ -161,11 +161,11 @@ class IBRNetCollectedDataset(Dataset):
 
         support_images, support_depths, support_masks = self._load_sample(idx, train_rgb_files, support_pose_ids)
         query_images, query_depths, query_masks = self._load_sample(idx, train_rgb_files, query_pose_ids)
-
+        """
         if self.mode == 'train' and self.random_crop:
             support_images, support_depths, support_masks = random_crop_depth(support_images, support_depths, support_masks, size=(self.depth_H, self.depth_W))
             query_images, query_depths, query_masks = random_crop_depth(query_images, query_depths, query_masks, size=(self.depth_H, self.depth_W))
-
+        """
         if self.mode == 'train' and np.random.choice([0, 1], p=[0.5, 0.5]):
             support_images, support_depths, support_masks = random_flip_depth(support_images, support_depths, support_masks,)
             query_images, query_depths, query_masks = random_flip_depth(query_images, query_depths, query_masks,)
@@ -190,9 +190,19 @@ class IBRNetCollectedDataset(Dataset):
 
         images = load_rgbs(image_list, os.path.join(datadir, 'images'),
                            None, None, is_png=False)
-        image_H = images.shape[2]
-        image_W = images.shape[3]
         
+        image_H = images.shape[-2]
+        image_W = images.shape[-1] 
+        
+        
+        ratio = image_W / image_H
+        output_H = 480
+        output_W = int(output_H * ratio)
+
+
+        images = load_rgbs(image_list, os.path.join(datadir, 'images'),
+                            output_H, output_W, is_png=False)
+
         # Save depth binary to detph image.
         #print(datadir)
         depthdir = os.path.join(datadir, 'depth')
@@ -224,9 +234,8 @@ class IBRNetCollectedDataset(Dataset):
             depths = torch.stack(depths)
             masks = torch.stack(masks)
         else:
-            print('colmap',datadir)
             depths, masks = load_colmap(image_list, datadir,
-                                        image_H, image_W,)
+                                        output_H, output_W,)
 
             depths = torch.from_numpy(depths)
             masks = torch.from_numpy(masks)
@@ -248,7 +257,7 @@ if __name__ == "__main__":
     args.datadir = "/media/hdd1/Datasets/ibrnet_NerfingMVS"
     args.list_prefix = 'new'
     args.factor = 2
-    args.num_source_views = 4
+    args.num_source_views = 6
     args.depth_H = 400#800
     args.depth_W = 400#800
 
@@ -256,7 +265,8 @@ if __name__ == "__main__":
     #print(len(dataset))
     #data = next(iter(dataset))
     #print(data)
-    for data in dataset:
+    loader = torch.utils.data.DataLoader(dataset, batch_size=1, num_workers=6, shuffle=True)
+    for data in loader:
         print('hello')
-        print(data["support_images"].shape, data["support_depths"].shape, data["support_masks"].shape)
-        raise NotImplementedError
+        #print(data["support_images"].shape, data["support_depths"].shape, data["support_masks"].shape)
+        #raise NotImplementedError

@@ -179,9 +179,18 @@ class NerfSyntheticDataset(Dataset):
 
         images = load_rgbs(image_list, os.path.join(datadir, 'images'),
                            None, None, is_png=False)
-        image_H = images.shape[2]
-        image_W = images.shape[3]
         
+        image_H = images.shape[-2]
+        image_W = images.shape[-1] 
+        
+        
+        ratio = image_W / image_H
+        output_H = 480
+        output_W = int(output_H * ratio)
+
+        images = load_rgbs(image_list, os.path.join(datadir, 'images'),
+                            output_H, output_W, is_png=False)
+
         # Save depth binary to detph image.
         #print(datadir)
         depthdir = os.path.join(datadir, 'depth')
@@ -214,7 +223,7 @@ class NerfSyntheticDataset(Dataset):
             masks = torch.stack(masks)
         else:
             depths, masks = load_colmap(image_list, datadir,
-                                        image_H, image_W,)
+                                        output_H, output_W,)
 
             depths = torch.from_numpy(depths)
             masks = torch.from_numpy(masks)
@@ -246,4 +255,4 @@ if __name__ == "__main__":
     for data in dataset:
         print('hello')
         print(data["support_images"].shape, data["support_depths"].shape, data["support_masks"].shape)
-        raise NotImplementedError
+        #raise NotImplementedError
