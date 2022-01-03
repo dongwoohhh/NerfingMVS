@@ -65,14 +65,42 @@ def train(args):
 
     
     images = load_rgbs(image_list, os.path.join(args.datadir, 'images'), 
-                       args.depth_H, args.depth_W)
+                       None, None,)
+                       #args.depth_H, args.depth_W)
+    #import pdb; pdb.set_trace()
+    image_H = images.shape[-2]
+    image_W = images.shape[-1]
+
+    ratio = image_W / image_H
+    output_H = 480
+    output_W = int(output_H * ratio)
+    #import pdb; pdb.set_trace()
+    images = load_rgbs(image_list, os.path.join(args.datadir, 'images'), 
+                       output_H, output_W,)
+
     images_train = images.clone()
+
+    
     depths, masks = load_colmap(image_list, args.datadir, 
-                                args.depth_H, args.depth_W)
+                                output_H, output_W)
+                                #args.depth_H, args.depth_W)
+
+    # save depth
+    depthdir = os.path.join(args.datadir, 'depth')
+    if not os.path.exists(depthdir):
+            os.mkdir(depthdir)
+    for i, image_name in enumerate(image_list):
+        depths_save = torch.from_numpy(depths)
+        masks_save = torch.from_numpy(masks)
+        depth_path = os.path.join(depthdir, image_name+'.pt')
+        if not os.path.exists(depth_path):
+            depth_cat = torch.stack([depths_save[i], masks_save[i]])
+            torch.save(depth_cat, depth_path)
+
 
     depths_train = torch.from_numpy(depths).to(device)
     depths_mask_train = torch.from_numpy(masks).to(device)
-
+    
     N_rand_depth = args.depth_N_rand
     N_iters_depth = args.depth_N_iters
     
@@ -80,12 +108,16 @@ def train(args):
     depth_model.train()
     start = global_step_depth + 1
     n_images = len(image_list)
-    
+
     for i in trange(start, N_iters_depth):
         n_batch = min(i_batch + N_rand_depth, n_images)
         batch = images_train[i_batch:n_batch]
         depth_gt, mask_gt = depths_train[i_batch:n_batch], depths_mask_train[i_batch:n_batch]
+        
         depth_pred = depth_model(batch)
+        if depth_gt.shape[0] == 1:
+            depth_pred = depth_pred.unsqueeze(0)
+
         loss = compute_depth_loss(depth_pred, depth_gt, mask_gt)
 
         optimizer_depth.zero_grad()
@@ -131,10 +163,16 @@ def train(args):
             frame_id = image_name.split('.')[0]
             batch = images[i:i + 1]
             depth_pred = depth_model.forward(batch).cpu()
+            
+            #depth_pred_save = torch.nn.functional.interpolate(depth_pred.unsqueeze(0), size=(image_H, image_W), mode='bilinear')
             torch.save(depth_pred, os.path.join(depthdir, image_name+'.pt'))
+            
+            
             depth_pred = depth_pred.numpy()
-            depth_color = visualize_depth(depth_pred)
+            
+            depth_color = visualize_depth(depth_pred.squeeze())
             cv2.imwrite(os.path.join(save_dir, 'results', '{}_depth.png'.format(frame_id)), depth_color)
+            cv2.imwrite(os.path.join(depthdir, image_name+'.png'), depth_color)
             np.save(os.path.join(save_dir, 'results', '{}_depth.npy'.format(frame_id)), depth_pred)
 
     print('results have been saved in {}'.format(os.path.join(save_dir, 'results')))

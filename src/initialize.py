@@ -4,6 +4,7 @@ from options import config_parser
 def main(args):
     basedir = args.basedir
     expname = args.expname
+
     os.makedirs(os.path.join(basedir, expname), exist_ok=True)
     
     os.makedirs(os.path.join(basedir, expname, 'depth_priors', 'checkpoints'), exist_ok=True)
