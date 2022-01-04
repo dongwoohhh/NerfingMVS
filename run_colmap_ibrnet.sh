@@ -10,7 +10,7 @@ for name in ${datadir}/* ; do
     #rm ${name}/images/train.txt ${name}/images/test.txt
     #python resize_image.py --datadir=${name}
     #python gen_image_ids.py --datadir=${name}
-
+    #rm -rf ${name}/images_1
     #sh colmap.sh ${name}
     python run_depth_priors.py --config configs/per_scene.txt --datadir=${name} --no_ndc --spherify --lindisp --expname=${name##*/}
 
@@ -29,7 +29,7 @@ for name in ${datadir}/* ; do
     #rm ${name}/images/train.txt ${name}/images/test.txt
     #python resize_image.py --datadir=${name}
     #python gen_image_ids.py --datadir=${name}
-
+    #rm -rf ${name}/images_1
     #sh colmap.sh ${name}
     
     python run_depth_priors.py --config configs/per_scene.txt --datadir=${name} --no_ndc --spherify --lindisp --expname=${name##*/}
