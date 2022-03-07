@@ -1,4 +1,4 @@
-basedir = /media/hdd1/results_nerf/NerfingMVS/per_scene_depth2
+basedir = /media/hdd1/results_nerf/NerfingMVS/per_scene_depth220228
 
 factor = 1
 

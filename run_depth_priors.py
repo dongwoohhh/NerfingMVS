@@ -13,6 +13,7 @@ if __name__=='__main__':
     torch.set_default_tensor_type('torch.cuda.FloatTensor')
     parser = config_parser()
     args = parser.parse_args()
+
     initialize.main(args)
     gen_poses(args.datadir)
     depth_priors.train(args)

@@ -72,7 +72,7 @@ def config_parser():
                         help='downsampling factor to speed up rendering, set 4 or 8 for fast preview')
     parser.add_argument("--white_bkgd", action='store_true',
                         help='set to render synthetic data on a white bkgd (always use for dvoxels)')
-    parser.add_argument("--factor", type=int, default=8,
+    parser.add_argument("--factor", type=float, default=8,
                         help='downsample factor for LLFF images')
     parser.add_argument("--N_views", type=int, default=120,
                         help='the number of render views')
